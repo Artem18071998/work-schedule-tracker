@@ -7,13 +7,12 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "next lint --fix",
-    "type-check": "tsc --noEmit"
+    "lint": "next lint"
   },
   "dependencies": {
-    "next": "^15.0.0",
-    "react": "^18.0.0",
-    "react-dom": "^18.0.0",
+    "next": "15.1.0",
+    "react": "18.3.1",
+    "react-dom": "18.3.1",
     "@radix-ui/react-accordion": "^1.1.2",
     "@radix-ui/react-alert-dialog": "^1.0.5",
     "@radix-ui/react-avatar": "^1.0.4",
@@ -27,29 +26,26 @@
     "@radix-ui/react-tabs": "^1.0.4",
     "@radix-ui/react-toast": "^1.1.5",
     "class-variance-authority": "^0.7.0",
-    "clsx": "^2.0.0",
+    "clsx": "^2.1.0",
     "lucide-react": "^0.294.0",
-    "tailwind-merge": "^2.0.0",
+    "tailwind-merge": "^2.2.0",
     "tailwindcss-animate": "^1.0.7",
     "jspdf": "^2.5.1",
     "xlsx": "^0.18.5"
   },
   "devDependencies": {
-    "@types/node": "^20.0.0",
-    "@types/react": "^18.0.0",
-    "@types/react-dom": "^18.0.0",
-    "autoprefixer": "^10.0.1",
-    "eslint": "^8.0.0",
-    "eslint-config-next": "^15.0.0",
-    "postcss": "^8.0.0",
-    "tailwindcss": "^3.3.0",
-    "typescript": "^5.0.0"
+    "@types/node": "^20.11.0",
+    "@types/react": "^18.2.48",
+    "@types/react-dom": "^18.2.18",
+    "autoprefixer": "^10.4.17",
+    "eslint": "^8.56.0",
+    "eslint-config-next": "15.1.0",
+    "postcss": "^8.4.33",
+    "tailwindcss": "^3.4.1",
+    "typescript": "^5.3.3"
   },
-  "keywords": ["work-schedule", "attendance-tracker", "time-tracking", "nextjs", "react", "typescript", "tailwindcss"],
-  "author": "Atlant Outsourcing Company",
-  "license": "MIT",
   "engines": {
-    "node": ">=18.0.0",
-    "npm": ">=8.0.0"
+    "node": ">=18.17.0",
+    "npm": ">=9.0.0"
   }
 }
