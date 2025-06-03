@@ -440,7 +440,7 @@ export default function WorkScheduleTracker() {
       yPosition += 7
       doc.setFont("helvetica", "normal")
 
-      workers.forEach((worker, index) => {
+      workers.forEach((worker) => {
         const stats = getWorkerStats(worker.id)
 
         if (yPosition > 260) {
@@ -817,7 +817,9 @@ export default function WorkScheduleTracker() {
                 <h1 className="text-xl sm:text-4xl font-bold bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text text-transparent mb-1 sm:mb-2 leading-tight">
                   Табель обліку робочого часу
                 </h1>
-                <p className="text-sm sm:text-xl text-gray-600 font-medium">Аутсорсингова компанія "Атлант"</p>
+                <p className="text-sm sm:text-xl text-gray-600 font-medium">
+                  Аутсорсингова компанія &quot;Атлант&quot;
+                </p>
               </div>
             </div>
           </CardContent>
@@ -939,7 +941,7 @@ export default function WorkScheduleTracker() {
               </CardHeader>
               <CardContent className="p-4 sm:p-8">
                 <div className="space-y-4 sm:space-y-8">
-                  {shifts.map((shift, index) => (
+                  {shifts.map((shift) => (
                     <Card key={shift.name} className="bg-gray-50 border-2 border-gray-200 rounded-xl shadow-md">
                       <CardHeader className="pb-2 sm:pb-4">
                         <CardTitle className="flex items-center gap-2 sm:gap-4 text-base sm:text-xl text-gray-800">
@@ -1079,14 +1081,14 @@ export default function WorkScheduleTracker() {
               <CardHeader className="bg-gradient-to-r from-green-500 to-green-600 text-white rounded-t-2xl p-4 sm:p-8">
                 <CardTitle className="flex items-center gap-2 sm:gap-4 text-lg sm:text-2xl">
                   <UserPlus className="h-6 w-6 sm:h-8 sm:w-8" />
-                  Додати нового працівника
+                  {"Додати нового працівника"}
                 </CardTitle>
               </CardHeader>
               <CardContent className="p-4 sm:p-8">
                 <div className="grid grid-cols-1 gap-4 sm:grid-cols-4 sm:gap-6">
                   <div className="space-y-2 sm:space-y-3">
                     <Label htmlFor="name" className="text-gray-700 font-semibold text-sm sm:text-base">
-                      Ім'я та прізвище
+                      {"Ім'я та прізвище"}
                     </Label>
                     <Input
                       id="name"
@@ -1183,7 +1185,7 @@ export default function WorkScheduleTracker() {
                   <Table>
                     <TableHeader>
                       <TableRow className="bg-gray-100">
-                        <TableHead className="font-bold text-gray-700">Ім'я</TableHead>
+                        <TableHead className="font-bold text-gray-700">{"Ім'я"}</TableHead>
                         <TableHead className="font-bold text-gray-700">Посада</TableHead>
                         <TableHead className="font-bold text-gray-700">Телефон</TableHead>
                         <TableHead className="font-bold text-gray-700">Відвідуваність</TableHead>
@@ -1477,7 +1479,7 @@ export default function WorkScheduleTracker() {
                       <div className="flex items-center gap-2 sm:gap-4">
                         <Badge className="bg-red-500 text-white text-xs sm:text-base">✗ Відсутній</Badge>
                         <span className="text-gray-700 font-medium text-xs sm:text-base">
-                          Працівник не з'явився на роботу без попередження
+                          {"Працівник не з'явився на роботу без попередження"}
                         </span>
                       </div>
                     </Card>
