@@ -17,15 +17,13 @@ import {
   TrendingUp,
   AlertTriangle,
   CheckCircle,
-  Download,
-  FileText,
-  FileSpreadsheet,
   Plus,
   UserPlus,
   Trash2,
   Menu,
   X,
   Save,
+  Download,
   Upload,
 } from "lucide-react"
 
@@ -64,17 +62,10 @@ const shifts: ShiftSchedule[] = [
 ]
 
 export default function WorkScheduleTracker() {
-  const [syncStatus, setSyncStatus] = useState<"idle" | "syncing" | "success" | "error">("idle")
-  const [lastSyncTime, setLastSyncTime] = useState<string | null>(null)
-  const [showSyncModal, setShowSyncModal] = useState(false)
-  const [syncCode, setSyncCode] = useState("")
-  const [importData, setImportData] = useState("")
-
   const [workers, setWorkers] = useState<Worker[]>([])
   const [workRecords, setWorkRecords] = useState<WorkRecord[]>([])
   const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split("T")[0])
   const [newWorker, setNewWorker] = useState({ name: "", position: "", phone: "" })
-  const [isExporting, setIsExporting] = useState(false)
   const [workerToDelete, setWorkerToDelete] = useState<string | null>(null)
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false)
   const [isLoaded, setIsLoaded] = useState(false)
@@ -92,16 +83,141 @@ export default function WorkScheduleTracker() {
     lunchBreak: 60,
   })
 
+  const [syncStatus, setSyncStatus] = useState<"idle" | "syncing" | "success" | "error">("idle")
+  const [lastSyncTime, setLastSyncTime] = useState<string | null>(null)
+  const [showSyncModal, setShowSyncModal] = useState(false)
+  const [syncCode, setSyncCode] = useState("")
+  const [importData, setImportData] = useState("")
+
+  // Генерация кода синхронизации
+  const generateSyncCode = () => {
+    const data = {
+      workers,
+      workRecords,
+      timestamp: new Date().toISOString(),
+    }
+
+    // Используем универсальную функцию кодирования Base64 для Unicode
+    const jsonString = JSON.stringify(data)
+    const encoded = btoa(unescape(encodeURIComponent(jsonString)))
+
+    setSyncCode(encoded)
+    setShowSyncModal(true)
+  }
+
+  // Импорт данных по коду
+  const importDataFromCode = () => {
+    try {
+      setSyncStatus("syncing")
+      // Декодирование с поддержкой Unicode
+      const jsonString = decodeURIComponent(escape(atob(importData)))
+      const decoded = JSON.parse(jsonString)
+
+      if (decoded.workers && decoded.workRecords) {
+        setWorkers(decoded.workers)
+        setWorkRecords(decoded.workRecords)
+        setLastSyncTime(new Date().toISOString())
+        setSyncStatus("success")
+        setImportData("")
+        setShowSyncModal(false)
+
+        setTimeout(() => setSyncStatus("idle"), 3000)
+      } else {
+        throw new Error("Неправильний формат даних")
+      }
+    } catch (error) {
+      console.error("Помилка імпорту:", error)
+      setSyncStatus("error")
+      setTimeout(() => setSyncStatus("idle"), 3000)
+    }
+  }
+
+  // Экспорт данных в файл
+  const exportDataToFile = () => {
+    const data = {
+      workers,
+      workRecords,
+      timestamp: new Date().toISOString(),
+      version: "1.0",
+    }
+
+    const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement("a")
+    a.href = url
+    a.download = `atlant_backup_${new Date().toISOString().split("T")[0]}.json`
+    a.click()
+    URL.revokeObjectURL(url)
+  }
+
+  // Импорт данных из файла
+  const importDataFromFile = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0]
+    if (!file) return
+
+    const reader = new FileReader()
+    reader.onload = (e) => {
+      try {
+        setSyncStatus("syncing")
+        const data = JSON.parse(e.target?.result as string)
+
+        if (data.workers && data.workRecords) {
+          setWorkers(data.workers)
+          setWorkRecords(data.workRecords)
+          setLastSyncTime(new Date().toISOString())
+          setSyncStatus("success")
+
+          setTimeout(() => setSyncStatus("idle"), 3000)
+        } else {
+          throw new Error("Неправильний формат файлу")
+        }
+      } catch (error) {
+        console.error("Помилка імпорту файлу:", error)
+        setSyncStatus("error")
+        setTimeout(() => setSyncStatus("idle"), 3000)
+      }
+    }
+    reader.readAsText(file)
+  }
+
   // Загрузка данных из localStorage при монтировании компонента
   useEffect(() => {
-    const savedWorkers = localStorage.getItem("atlant-workers")
-    const savedRecords = localStorage.getItem("atlant-work-records")
+    if (typeof window !== "undefined") {
+      const savedWorkers = localStorage.getItem("atlant-workers")
+      const savedRecords = localStorage.getItem("atlant-work-records")
 
-    if (savedWorkers) {
-      try {
-        setWorkers(JSON.parse(savedWorkers))
-      } catch (error) {
-        console.error("Ошибка загрузки работников:", error)
+      if (savedWorkers) {
+        try {
+          setWorkers(JSON.parse(savedWorkers))
+        } catch (error) {
+          console.error("Ошибка загрузки работников:", error)
+          const defaultWorkers = [
+            {
+              id: "1",
+              name: "Іван Петренко",
+              position: "Комплектувальник",
+              phone: "+380501234567",
+              createdAt: new Date().toISOString(),
+            },
+            {
+              id: "2",
+              name: "Марія Коваленко",
+              position: "Комплектувальник",
+              phone: "+380671234567",
+              createdAt: new Date().toISOString(),
+            },
+            {
+              id: "3",
+              name: "Олександр Сидоренко",
+              position: "Старший комплектувальник",
+              phone: "+380931234567",
+              createdAt: new Date().toISOString(),
+            },
+          ]
+          setWorkers(defaultWorkers)
+          localStorage.setItem("atlant-workers", JSON.stringify(defaultWorkers))
+        }
+      } else {
         const defaultWorkers = [
           {
             id: "1",
@@ -128,56 +244,30 @@ export default function WorkScheduleTracker() {
         setWorkers(defaultWorkers)
         localStorage.setItem("atlant-workers", JSON.stringify(defaultWorkers))
       }
-    } else {
-      const defaultWorkers = [
-        {
-          id: "1",
-          name: "Іван Петренко",
-          position: "Комплектувальник",
-          phone: "+380501234567",
-          createdAt: new Date().toISOString(),
-        },
-        {
-          id: "2",
-          name: "Марія Коваленко",
-          position: "Комплектувальник",
-          phone: "+380671234567",
-          createdAt: new Date().toISOString(),
-        },
-        {
-          id: "3",
-          name: "Олександр Сидоренко",
-          position: "Старший комплектувальник",
-          phone: "+380931234567",
-          createdAt: new Date().toISOString(),
-        },
-      ]
-      setWorkers(defaultWorkers)
-      localStorage.setItem("atlant-workers", JSON.stringify(defaultWorkers))
-    }
 
-    if (savedRecords) {
-      try {
-        setWorkRecords(JSON.parse(savedRecords))
-      } catch (error) {
-        console.error("Ошибка загрузки записей:", error)
-        setWorkRecords([])
+      if (savedRecords) {
+        try {
+          setWorkRecords(JSON.parse(savedRecords))
+        } catch (error) {
+          console.error("Ошибка загрузки записей:", error)
+          setWorkRecords([])
+        }
       }
-    }
 
-    setIsLoaded(true)
+      setIsLoaded(true)
+    }
   }, [])
 
   // Сохранение работников в localStorage при изменении
   useEffect(() => {
-    if (isLoaded) {
+    if (isLoaded && typeof window !== "undefined") {
       localStorage.setItem("atlant-workers", JSON.stringify(workers))
     }
   }, [workers, isLoaded])
 
   // Сохранение записей в localStorage при изменении
   useEffect(() => {
-    if (isLoaded) {
+    if (isLoaded && typeof window !== "undefined") {
       localStorage.setItem("atlant-work-records", JSON.stringify(workRecords))
     }
   }, [workRecords, isLoaded])
@@ -402,394 +492,6 @@ export default function WorkScheduleTracker() {
         )}
       </div>
     )
-  }
-
-  // Функции экспорта
-  const exportToPDF = async () => {
-    setIsExporting(true)
-    try {
-      const { jsPDF } = await import("jspdf")
-      const doc = new jsPDF({
-        orientation: "portrait",
-        unit: "mm",
-        format: "a4",
-      })
-
-      doc.setFont("helvetica")
-      doc.setFontSize(18)
-      doc.text('Tabel obliku robochoho chasu - "Atlant"', 105, 20, { align: "center" })
-
-      doc.setFontSize(12)
-      doc.text(`Data: ${new Date(selectedDate).toLocaleDateString("uk-UA")}`, 105, 30, { align: "center" })
-
-      doc.setLineWidth(0.5)
-      doc.line(20, 35, 190, 35)
-
-      let yPosition = 50
-      doc.setFontSize(10)
-      doc.setFont("helvetica", "bold")
-
-      doc.text("Imya", 25, yPosition)
-      doc.text("Posada", 80, yPosition)
-      doc.text("Telefon", 125, yPosition)
-      doc.text("Vidviduvanist", 165, yPosition)
-
-      yPosition += 3
-      doc.line(20, yPosition, 190, yPosition)
-
-      yPosition += 7
-      doc.setFont("helvetica", "normal")
-
-      workers.forEach((worker) => {
-        const stats = getWorkerStats(worker.id)
-
-        if (yPosition > 260) {
-          doc.addPage()
-          yPosition = 30
-
-          doc.setFont("helvetica", "bold")
-          doc.text("Imya", 25, yPosition)
-          doc.text("Posada", 80, yPosition)
-          doc.text("Telefon", 125, yPosition)
-          doc.text("Vidviduvanist", 165, yPosition)
-
-          yPosition += 3
-          doc.line(20, yPosition, 190, yPosition)
-          yPosition += 7
-          doc.setFont("helvetica", "normal")
-        }
-
-        const transliteratedName = transliterate(worker.name)
-        const transliteratedPosition = transliterate(worker.position)
-
-        const maxNameLength = 20
-        const maxPositionLength = 15
-        const shortName =
-          transliteratedName.length > maxNameLength
-            ? transliteratedName.substring(0, maxNameLength) + "..."
-            : transliteratedName
-        const shortPosition =
-          transliteratedPosition.length > maxPositionLength
-            ? transliteratedPosition.substring(0, maxPositionLength) + "..."
-            : transliteratedPosition
-
-        doc.text(shortName, 25, yPosition)
-        doc.text(shortPosition, 80, yPosition)
-        doc.text(worker.phone, 125, yPosition)
-        doc.text(`${stats.attendanceRate}%`, 165, yPosition)
-        doc.text(`(${stats.presentDays}/${stats.totalDays})`, 175, yPosition)
-
-        yPosition += 8
-      })
-
-      yPosition += 10
-
-      if (yPosition > 240) {
-        doc.addPage()
-        yPosition = 30
-      }
-
-      doc.line(20, yPosition, 190, yPosition)
-      yPosition += 10
-
-      doc.setFont("helvetica", "bold")
-      doc.setFontSize(14)
-      doc.text("Statistika:", 25, yPosition)
-
-      yPosition += 10
-      doc.setFont("helvetica", "normal")
-      doc.setFontSize(10)
-
-      const presentToday = workRecords.filter((r) => r.date === selectedDate && r.status === "присутній").length
-      const absentToday = workRecords.filter((r) => r.date === selectedDate && r.status === "відсутній").length
-      const lateToday = workRecords.filter((r) => r.date === selectedDate && r.status === "запізнення").length
-
-      doc.text(`Vsoho pratsivnikiv: ${workers.length}`, 25, yPosition)
-      yPosition += 6
-      doc.text(`Prisutni sohodni: ${presentToday}`, 25, yPosition)
-      yPosition += 6
-      doc.text(`Vidsutni sohodni: ${absentToday}`, 25, yPosition)
-      yPosition += 6
-      doc.text(`Zapiznilisya sohodni: ${lateToday}`, 25, yPosition)
-      yPosition += 6
-
-      const avgAttendance =
-        workers.length > 0
-          ? Math.round(
-              workers.reduce((acc, worker) => acc + getWorkerStats(worker.id).attendanceRate, 0) / workers.length,
-            )
-          : 0
-      doc.text(`Serednya vidviduvanist: ${avgAttendance}%`, 25, yPosition)
-
-      yPosition += 15
-      doc.setFontSize(8)
-      doc.text(`Zvit stvoreno: ${new Date().toLocaleString("uk-UA")}`, 25, yPosition)
-
-      doc.save(`tabel_${selectedDate}.pdf`)
-    } catch (error) {
-      console.error("Pomilka eksportu PDF:", error)
-      alert("Помилка при створенні PDF файлу")
-    } finally {
-      setIsExporting(false)
-    }
-  }
-
-  const transliterate = (text: string): string => {
-    const transliterationMap: { [key: string]: string } = {
-      а: "a",
-      б: "b",
-      в: "v",
-      г: "h",
-      ґ: "g",
-      д: "d",
-      е: "e",
-      є: "ye",
-      ж: "zh",
-      з: "z",
-      и: "y",
-      і: "i",
-      ї: "yi",
-      й: "y",
-      к: "k",
-      л: "l",
-      м: "m",
-      н: "n",
-      о: "o",
-      п: "p",
-      р: "r",
-      с: "s",
-      т: "t",
-      у: "u",
-      ф: "f",
-      х: "kh",
-      ц: "ts",
-      ч: "ch",
-      ш: "sh",
-      щ: "shch",
-      ь: "",
-      ю: "yu",
-      я: "ya",
-      А: "A",
-      Б: "B",
-      В: "V",
-      Г: "H",
-      Ґ: "G",
-      Д: "D",
-      Е: "E",
-      Є: "Ye",
-      Ж: "Zh",
-      З: "Z",
-      И: "Y",
-      І: "I",
-      Ї: "Yi",
-      Й: "Y",
-      К: "K",
-      Л: "L",
-      М: "M",
-      Н: "N",
-      О: "O",
-      П: "P",
-      Р: "R",
-      С: "S",
-      Т: "T",
-      У: "U",
-      Ф: "F",
-      Х: "Kh",
-      Ц: "Ts",
-      Ч: "Ch",
-      Ш: "Sh",
-      Щ: "Shch",
-      Ь: "",
-      Ю: "Yu",
-      Я: "Ya",
-    }
-
-    return text
-      .split("")
-      .map((char) => transliterationMap[char] || char)
-      .join("")
-  }
-
-  const exportToExcel = async () => {
-    setIsExporting(true)
-    try {
-      const XLSX = await import("xlsx")
-      const data = workers.map((worker) => {
-        const stats = getWorkerStats(worker.id)
-        return {
-          "Ім'я": worker.name,
-          Посада: worker.position,
-          Телефон: worker.phone,
-          "Всього днів": stats.totalDays,
-          Присутній: stats.presentDays,
-          Відсутній: stats.absentDays,
-          Запізнення: stats.lateDays,
-          "Відвідуваність %": stats.attendanceRate,
-        }
-      })
-      const ws = XLSX.utils.json_to_sheet(data)
-      const wb = XLSX.utils.book_new()
-      XLSX.utils.book_append_sheet(wb, ws, "Статистика")
-      XLSX.writeFile(wb, `табель_${selectedDate}.xlsx`)
-    } catch (error) {
-      console.error("Помилка експорту Excel:", error)
-    } finally {
-      setIsExporting(false)
-    }
-  }
-
-  const exportToWord = async () => {
-    setIsExporting(true)
-    try {
-      let htmlContent = `
-        <html>
-          <head>
-            <meta charset="utf-8">
-            <title>Табель обліку робочого часу</title>
-            <style>
-              body { font-family: Arial, sans-serif; }
-              table { border-collapse: collapse; width: 100%; }
-              th, td { border: 1px solid #ddd; padding: 8px; text-align: left; }
-              th { background-color: #f2f2f2; }
-              h1 { color: #333; }
-            </style>
-          </head>
-          <body>
-            <h1>Табель обліку робочого часу - "Атлант"</h1>
-            <p>Дата: ${new Date(selectedDate).toLocaleDateString("uk-UA")}</p>
-            <table>
-              <tr>
-                <th>Ім'я</th>
-                <th>Посада</th>
-                <th>Телефон</th>
-                <th>Відвідуваність</th>
-                <th>Присутній</th>
-                <th>Відсутній</th>
-                <th>Запізнення</th>
-              </tr>
-      `
-      workers.forEach((worker) => {
-        const stats = getWorkerStats(worker.id)
-        htmlContent += `
-          <tr>
-            <td>${worker.name}</td>
-            <td>${worker.position}</td>
-            <td>${worker.phone}</td>
-            <td>${stats.attendanceRate}%</td>
-            <td>${stats.presentDays}</td>
-            <td>${stats.absentDays}</td>
-            <td>${stats.lateDays}</td>
-          </tr>
-        `
-      })
-      htmlContent += `
-            </table>
-          </body>
-        </html>
-      `
-      const blob = new Blob([htmlContent], { type: "application/msword" })
-      const url = URL.createObjectURL(blob)
-      const a = document.createElement("a")
-      a.href = url
-      a.download = `табель_${selectedDate}.doc`
-      a.click()
-      URL.revokeObjectURL(url)
-    } catch (error) {
-      console.error("Помилка експорту Word:", error)
-    } finally {
-      setIsExporting(false)
-    }
-  }
-
-  // Генерация кода синхронизации
-  const generateSyncCode = () => {
-    const data = {
-      workers,
-      workRecords,
-      timestamp: new Date().toISOString(),
-    }
-
-    // Используем универсальную функцию кодирования Base64 для Unicode
-    const jsonString = JSON.stringify(data)
-    const encoded = btoa(unescape(encodeURIComponent(jsonString)))
-
-    setSyncCode(encoded)
-    setShowSyncModal(true)
-  }
-
-  // Импорт данных по коду
-  const importDataFromCode = () => {
-    try {
-      setSyncStatus("syncing")
-      // Декодирование с поддержкой Unicode
-      const jsonString = decodeURIComponent(escape(atob(importData)))
-      const decoded = JSON.parse(jsonString)
-
-      if (decoded.workers && decoded.workRecords) {
-        setWorkers(decoded.workers)
-        setWorkRecords(decoded.workRecords)
-        setLastSyncTime(new Date().toISOString())
-        setSyncStatus("success")
-        setImportData("")
-        setShowSyncModal(false)
-
-        setTimeout(() => setSyncStatus("idle"), 3000)
-      } else {
-        throw new Error("Неправильний формат даних")
-      }
-    } catch (error) {
-      console.error("Помилка імпорту:", error)
-      setSyncStatus("error")
-      setTimeout(() => setSyncStatus("idle"), 3000)
-    }
-  }
-
-  // Экспорт данных в файл
-  const exportDataToFile = () => {
-    const data = {
-      workers,
-      workRecords,
-      timestamp: new Date().toISOString(),
-      version: "1.0",
-    }
-
-    const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" })
-    const url = URL.createObjectURL(blob)
-    const a = document.createElement("a")
-    a.href = url
-    a.download = `atlant_backup_${new Date().toISOString().split("T")[0]}.json`
-    a.click()
-    URL.revokeObjectURL(url)
-  }
-
-  // Импорт данных из файла
-  const importDataFromFile = (event: React.ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0]
-    if (!file) return
-
-    const reader = new FileReader()
-    reader.onload = (e) => {
-      try {
-        setSyncStatus("syncing")
-        const data = JSON.parse(e.target?.result as string)
-
-        if (data.workers && data.workRecords) {
-          setWorkers(data.workers)
-          setWorkRecords(data.workRecords)
-          setLastSyncTime(new Date().toISOString())
-          setSyncStatus("success")
-
-          setTimeout(() => setSyncStatus("idle"), 3000)
-        } else {
-          throw new Error("Неправильний формат файлу")
-        }
-      } catch (error) {
-        console.error("Помилка імпорту файлу:", error)
-        setSyncStatus("error")
-        setTimeout(() => setSyncStatus("idle"), 3000)
-      }
-    }
-    reader.readAsText(file)
   }
 
   if (!isLoaded) {
@@ -1081,7 +783,7 @@ export default function WorkScheduleTracker() {
               <CardHeader className="bg-gradient-to-r from-green-500 to-green-600 text-white rounded-t-2xl p-4 sm:p-8">
                 <CardTitle className="flex items-center gap-2 sm:gap-4 text-lg sm:text-2xl">
                   <UserPlus className="h-6 w-6 sm:h-8 sm:w-8" />
-                  {"Додати нового працівника"}
+                  Додати нового працівника
                 </CardTitle>
               </CardHeader>
               <CardContent className="p-4 sm:p-8">
@@ -1235,44 +937,6 @@ export default function WorkScheduleTracker() {
           </TabsContent>
 
           <TabsContent value="statistics" className="space-y-4 sm:space-y-8">
-            {/* Кнопки экспорта */}
-            <Card className="bg-white shadow-xl rounded-2xl border-0">
-              <CardHeader className="bg-gradient-to-r from-purple-500 to-purple-600 text-white rounded-t-2xl p-4 sm:p-8">
-                <CardTitle className="flex items-center gap-2 sm:gap-4 text-lg sm:text-2xl">
-                  <Download className="h-6 w-6 sm:h-8 sm:w-8" />
-                  Експорт статистики
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="p-4 sm:p-8">
-                <div className="grid grid-cols-1 sm:flex gap-2 sm:gap-4">
-                  <Button
-                    onClick={exportToPDF}
-                    disabled={isExporting}
-                    className="bg-red-500 hover:bg-red-600 text-white shadow-lg rounded-lg font-semibold px-4 py-2 sm:px-6 sm:py-3 text-sm sm:text-base"
-                  >
-                    <FileText className="h-4 w-4 sm:h-5 sm:w-5 mr-1 sm:mr-2" />
-                    {isExporting ? "Експорт..." : "📄 PDF"}
-                  </Button>
-                  <Button
-                    onClick={exportToExcel}
-                    disabled={isExporting}
-                    className="bg-green-500 hover:bg-green-600 text-white shadow-lg rounded-lg font-semibold px-4 py-2 sm:px-6 sm:py-3 text-sm sm:text-base"
-                  >
-                    <FileSpreadsheet className="h-4 w-4 sm:h-5 sm:w-5 mr-1 sm:mr-2" />
-                    {isExporting ? "Експорт..." : "📊 Excel"}
-                  </Button>
-                  <Button
-                    onClick={exportToWord}
-                    disabled={isExporting}
-                    className="bg-blue-500 hover:bg-blue-600 text-white shadow-lg rounded-lg font-semibold px-4 py-2 sm:px-6 sm:py-3 text-sm sm:text-base"
-                  >
-                    <FileText className="h-4 w-4 sm:h-5 sm:w-5 mr-1 sm:mr-2" />
-                    {isExporting ? "Експорт..." : "📝 Word"}
-                  </Button>
-                </div>
-              </CardContent>
-            </Card>
-
             {/* Статистические карточки */}
             <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-6">
               <Card className="bg-gradient-to-br from-blue-500 to-blue-600 text-white shadow-xl rounded-2xl">
@@ -1459,56 +1123,7 @@ export default function WorkScheduleTracker() {
                 </div>
               </CardContent>
             </Card>
-
-            <Card className="bg-white shadow-xl rounded-2xl border-0">
-              <CardHeader className="bg-gradient-to-r from-orange-500 to-red-500 text-white rounded-t-2xl p-4 sm:p-8">
-                <CardTitle className="text-lg sm:text-2xl">📋 Правила обліку</CardTitle>
-              </CardHeader>
-              <CardContent className="p-4 sm:p-8">
-                <div className="grid grid-cols-1 gap-3 sm:gap-6">
-                  <div className="space-y-3 sm:space-y-4">
-                    <Card className="bg-green-50 border-2 border-green-200 rounded-lg p-3 sm:p-4">
-                      <div className="flex items-center gap-2 sm:gap-4">
-                        <Badge className="bg-green-500 text-white text-xs sm:text-base">✓ Присутній</Badge>
-                        <span className="text-gray-700 font-medium text-xs sm:text-base">
-                          Працівник прийшов на роботу вчасно
-                        </span>
-                      </div>
-                    </Card>
-                    <Card className="bg-red-50 border-2 border-red-200 rounded-lg p-3 sm:p-4">
-                      <div className="flex items-center gap-2 sm:gap-4">
-                        <Badge className="bg-red-500 text-white text-xs sm:text-base">✗ Відсутній</Badge>
-                        <span className="text-gray-700 font-medium text-xs sm:text-base">
-                          {"Працівник не з'явився на роботу без попередження"}
-                        </span>
-                      </div>
-                    </Card>
-                    <Card className="bg-yellow-50 border-2 border-yellow-200 rounded-lg p-3 sm:p-4">
-                      <div className="flex items-center gap-2 sm:gap-4">
-                        <Badge className="bg-yellow-500 text-white text-xs sm:text-base">⏰ Запізнення</Badge>
-                        <span className="text-gray-700 font-medium text-xs sm:text-base">
-                          Працівник прийшов на роботу із запізненням
-                        </span>
-                      </div>
-                    </Card>
-                    <Card className="bg-blue-50 border-2 border-blue-200 rounded-lg p-3 sm:p-4">
-                      <div className="flex items-center gap-2 sm:gap-4">
-                        <Badge className="bg-blue-500 text-white text-xs sm:text-base">🏥 Лікарняний</Badge>
-                        <span className="text-gray-700 font-medium text-xs sm:text-base">Працівник на лікарняному</span>
-                      </div>
-                    </Card>
-                    <Card className="bg-purple-50 border-2 border-purple-200 rounded-lg p-3 sm:p-4">
-                      <div className="flex items-center gap-2 sm:gap-4">
-                        <Badge className="bg-purple-500 text-white text-xs sm:text-base">🏖️ Відпустка</Badge>
-                        <span className="text-gray-700 font-medium text-xs sm:text-base">Працівник у відпустці</span>
-                      </div>
-                    </Card>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
           </TabsContent>
-
           <TabsContent value="sync" className="space-y-4 sm:space-y-8">
             <Card className="bg-white shadow-xl rounded-2xl border-0">
               <CardHeader className="bg-gradient-to-r from-indigo-500 to-indigo-600 text-white rounded-t-2xl p-4 sm:p-8">
@@ -1663,7 +1278,7 @@ export default function WorkScheduleTracker() {
                 </div>
 
                 {/* Статистика данных */}
-                <Card className="bg-gray-50 border border-gray-200">
+                <Card className="mt-6 bg-gray-50 border border-gray-200">
                   <CardHeader className="pb-3">
                     <CardTitle className="flex items-center gap-3 text-gray-700">📊 Статистика даних</CardTitle>
                   </CardHeader>

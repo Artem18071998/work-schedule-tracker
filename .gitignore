@@ -97,6 +97,6 @@ coverage/
 .yarn/install-state.gz
 .pnp.*
 
-# Lock files (для Vercel лучше использовать npm)
+# Lock files
 package-lock.json
 yarn.lock
