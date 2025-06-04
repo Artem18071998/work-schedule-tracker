@@ -1,6 +1,7 @@
 import type React from "react"
 import type { Metadata } from "next"
 import "./globals.css"
+import { AuthProvider } from "./auth-provider"
 
 export const metadata: Metadata = {
   title: "Табель обліку робочого часу - Атлант",
@@ -14,7 +15,9 @@ export default function RootLayout({
 }) {
   return (
     <html lang="uk">
-      <body>{children}</body>
+      <body>
+        <AuthProvider>{children}</AuthProvider>
+      </body>
     </html>
   )
 }

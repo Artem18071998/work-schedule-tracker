@@ -1,8 +1,6 @@
 "use client"
-
-import type React from "react"
-
 import { useState, useEffect } from "react"
+
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -10,6 +8,8 @@ import { Label } from "@/components/ui/label"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Badge } from "@/components/ui/badge"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import Link from "next/link"
+import { useAuth } from "./auth-provider"
 import {
   Calendar,
   Clock,
@@ -24,7 +24,9 @@ import {
   X,
   Save,
   Download,
-  Upload,
+  FileSpreadsheet,
+  RefreshCw,
+  LogOut,
 } from "lucide-react"
 
 interface Worker {
@@ -62,6 +64,7 @@ const shifts: ShiftSchedule[] = [
 ]
 
 export default function WorkScheduleTracker() {
+  const { logout } = useAuth()
   const [workers, setWorkers] = useState<Worker[]>([])
   const [workRecords, setWorkRecords] = useState<WorkRecord[]>([])
   const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split("T")[0])
@@ -69,6 +72,7 @@ export default function WorkScheduleTracker() {
   const [workerToDelete, setWorkerToDelete] = useState<string | null>(null)
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false)
   const [isLoaded, setIsLoaded] = useState(false)
+  const [isExporting, setIsExporting] = useState(false)
 
   const [timeModalOpen, setTimeModalOpen] = useState(false)
   const [timeModalData, setTimeModalData] = useState<{
@@ -82,103 +86,6 @@ export default function WorkScheduleTracker() {
     departureTime: "",
     lunchBreak: 60,
   })
-
-  const [syncStatus, setSyncStatus] = useState<"idle" | "syncing" | "success" | "error">("idle")
-  const [lastSyncTime, setLastSyncTime] = useState<string | null>(null)
-  const [showSyncModal, setShowSyncModal] = useState(false)
-  const [syncCode, setSyncCode] = useState("")
-  const [importData, setImportData] = useState("")
-
-  // Генерация кода синхронизации
-  const generateSyncCode = () => {
-    const data = {
-      workers,
-      workRecords,
-      timestamp: new Date().toISOString(),
-    }
-
-    // Используем универсальную функцию кодирования Base64 для Unicode
-    const jsonString = JSON.stringify(data)
-    const encoded = btoa(unescape(encodeURIComponent(jsonString)))
-
-    setSyncCode(encoded)
-    setShowSyncModal(true)
-  }
-
-  // Импорт данных по коду
-  const importDataFromCode = () => {
-    try {
-      setSyncStatus("syncing")
-      // Декодирование с поддержкой Unicode
-      const jsonString = decodeURIComponent(escape(atob(importData)))
-      const decoded = JSON.parse(jsonString)
-
-      if (decoded.workers && decoded.workRecords) {
-        setWorkers(decoded.workers)
-        setWorkRecords(decoded.workRecords)
-        setLastSyncTime(new Date().toISOString())
-        setSyncStatus("success")
-        setImportData("")
-        setShowSyncModal(false)
-
-        setTimeout(() => setSyncStatus("idle"), 3000)
-      } else {
-        throw new Error("Неправильний формат даних")
-      }
-    } catch (error) {
-      console.error("Помилка імпорту:", error)
-      setSyncStatus("error")
-      setTimeout(() => setSyncStatus("idle"), 3000)
-    }
-  }
-
-  // Экспорт данных в файл
-  const exportDataToFile = () => {
-    const data = {
-      workers,
-      workRecords,
-      timestamp: new Date().toISOString(),
-      version: "1.0",
-    }
-
-    const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" })
-    const url = URL.createObjectURL(blob)
-    const a = document.createElement("a")
-    a.href = url
-    a.download = `atlant_backup_${new Date().toISOString().split("T")[0]}.json`
-    a.click()
-    URL.revokeObjectURL(url)
-  }
-
-  // Импорт данных из файла
-  const importDataFromFile = (event: React.ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0]
-    if (!file) return
-
-    const reader = new FileReader()
-    reader.onload = (e) => {
-      try {
-        setSyncStatus("syncing")
-        const data = JSON.parse(e.target?.result as string)
-
-        if (data.workers && data.workRecords) {
-          setWorkers(data.workers)
-          setWorkRecords(data.workRecords)
-          setLastSyncTime(new Date().toISOString())
-          setSyncStatus("success")
-
-          setTimeout(() => setSyncStatus("idle"), 3000)
-        } else {
-          throw new Error("Неправильний формат файлу")
-        }
-      } catch (error) {
-        console.error("Помилка імпорту файлу:", error)
-        setSyncStatus("error")
-        setTimeout(() => setSyncStatus("idle"), 3000)
-      }
-    }
-    reader.readAsText(file)
-  }
 
   // Загрузка данных из localStorage при монтировании компонента
   useEffect(() => {
@@ -494,6 +401,284 @@ export default function WorkScheduleTracker() {
     )
   }
 
+  // Экспорт в PDF с поддержкой украинского
+  const exportToPDF = async () => {
+    setIsExporting(true)
+    try {
+      // Создаем HTML контент
+      const htmlContent = `
+    <!DOCTYPE html>
+    <html>
+    <head>
+      <meta charset="utf-8">
+      <title>Табель обліку робочого часу</title>
+      <style>
+        body { font-family: Arial, sans-serif; margin: 20px; font-size: 12px; }
+        h1 { color: #3b82f6; text-align: center; font-size: 18px; margin-bottom: 10px; }
+        h2 { color: #1f2937; border-bottom: 2px solid #3b82f6; padding-bottom: 5px; font-size: 14px; margin-top: 20px; }
+        table { width: 100%; border-collapse: collapse; margin: 10px 0; }
+        th, td { border: 1px solid #ddd; padding: 6px; text-align: left; font-size: 10px; }
+        th { background-color: #3b82f6; color: white; }
+        .stats { background-color: #f3f4f6; padding: 8px; border-radius: 5px; margin: 10px 0; }
+        .company { text-align: center; font-weight: bold; margin-bottom: 5px; }
+        .date { text-align: center; margin-bottom: 20px; }
+        @media print { body { margin: 0; } }
+      </style>
+    </head>
+    <body>
+      <h1>Табель обліку робочого часу</h1>
+      <p class="company">Аутсорсингова компанія "Атлант"</p>
+      <p class="date">Дата: ${new Date().toLocaleDateString("uk-UA")}</p>
+      
+      <h2>Загальна статистика</h2>
+      <div class="stats">
+        <p><strong>Всього працівників:</strong> ${workers.length}</p>
+        <p><strong>Присутні сьогодні:</strong> ${workRecords.filter((r) => r.date === selectedDate && r.status === "присутній").length}</p>
+        <p><strong>Відсутні сьогодні:</strong> ${workRecords.filter((r) => r.date === selectedDate && r.status === "відсутній").length}</p>
+        <p><strong>Середня відвідуваність:</strong> ${workers.length > 0 ? Math.round(workers.reduce((acc, worker) => acc + getWorkerStats(worker.id).attendanceRate, 0) / workers.length) : 0}%</p>
+      </div>
+
+      <h2>Статистика по працівниках</h2>
+      <table>
+        <thead>
+          <tr>
+            <th>Працівник</th>
+            <th>Посада</th>
+            <th>Всього днів</th>
+            <th>Присутній</th>
+            <th>Відсутній</th>
+            <th>Запізнення</th>
+            <th>Відвідуваність</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${workers
+            .map((worker) => {
+              const stats = getWorkerStats(worker.id)
+              return `
+              <tr>
+                <td>${worker.name}</td>
+                <td>${worker.position}</td>
+                <td>${stats.totalDays}</td>
+                <td>${stats.presentDays}</td>
+                <td>${stats.absentDays}</td>
+                <td>${stats.lateDays}</td>
+                <td>${stats.attendanceRate}%</td>
+              </tr>
+            `
+            })
+            .join("")}
+        </tbody>
+      </table>
+
+      <h2>Записи за ${new Date(selectedDate).toLocaleDateString("uk-UA")}</h2>
+      <table>
+        <thead>
+          <tr>
+            <th>Працівник</th>
+            <th>Зміна</th>
+            <th>Статус</th>
+            <th>Час приходу</th>
+            <th>Час відходу</th>
+            <th>Відпрацьовано</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${workRecords
+            .filter((r) => r.date === selectedDate)
+            .map((record) => {
+              const worker = workers.find((w) => w.id === record.workerId)
+              const shift = getShiftByName(record.shift)
+              const worked = calculateWorkedHours(record, shift)
+              return `
+              <tr>
+                <td>${worker?.name || "Невідомий"}</td>
+                <td>${record.shift}</td>
+                <td>${record.status}</td>
+                <td>${record.arrivalTime || "-"}</td>
+                <td>${record.departureTime || "-"}</td>
+                <td>${worked.hours}:${worked.minutes.toString().padStart(2, "0")}</td>
+              </tr>
+            `
+            })
+            .join("")}
+        </tbody>
+      </table>
+
+      <h2>Розклад змін</h2>
+      <table>
+        <thead>
+          <tr>
+            <th>Зміна</th>
+            <th>Час роботи</th>
+            <th>Дні тижня</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${shifts
+            .map(
+              (shift) => `
+            <tr>
+              <td>${shift.name}</td>
+              <td>${shift.start} - ${shift.end}</td>
+              <td>${shift.days.join(", ")}</td>
+            </tr>
+          `,
+            )
+            .join("")}
+        </tbody>
+      </table>
+    </body>
+    </html>
+  `
+
+      // Создаем Blob и открываем для печати
+      const blob = new Blob([htmlContent], { type: "text/html;charset=utf-8" })
+      const url = URL.createObjectURL(blob)
+      const newWindow = window.open(url, "_blank")
+
+      if (newWindow) {
+        newWindow.onload = () => {
+          setTimeout(() => {
+            newWindow.print()
+            newWindow.close()
+            URL.revokeObjectURL(url)
+          }, 500)
+        }
+      }
+    } catch (error) {
+      console.error("Помилка експорту PDF:", error)
+      alert("Помилка при створенні PDF файлу")
+    } finally {
+      setIsExporting(false)
+    }
+  }
+
+  // Экспорт в Word
+  const exportToWord = async () => {
+    setIsExporting(true)
+    try {
+      const htmlContent = `
+    <!DOCTYPE html>
+    <html xmlns:o='urn:schemas-microsoft-com:office:office' xmlns:w='urn:schemas-microsoft-com:office:word' xmlns='http://www.w3.org/TR/REC-html40'>
+    <head>
+      <meta charset="utf-8">
+      <title>Табель обліку робочого часу</title>
+      <style>
+        body { font-family: Arial, sans-serif; margin: 20px; font-size: 12pt; }
+        h1 { color: #3b82f6; text-align: center; font-size: 18pt; margin-bottom: 10pt; }
+        h2 { color: #1f2937; border-bottom: 2pt solid #3b82f6; padding-bottom: 5pt; font-size: 14pt; margin-top: 20pt; }
+        table { width: 100%; border-collapse: collapse; margin: 10pt 0; }
+        th, td { border: 1pt solid #000; padding: 6pt; text-align: left; font-size: 10pt; }
+        th { background-color: #3b82f6; color: white; }
+        .stats { background-color: #f3f4f6; padding: 8pt; margin: 10pt 0; }
+        .company { text-align: center; font-weight: bold; margin-bottom: 5pt; }
+        .date { text-align: center; margin-bottom: 20pt; }
+      </style>
+    </head>
+    <body>
+      <h1>Табель обліку робочого часу</h1>
+      <p class="company">Аутсорсингова компанія "Атлант"</p>
+      <p class="date">Дата: ${new Date().toLocaleDateString("uk-UA")}</p>
+      
+      <h2>Загальна статистика</h2>
+      <div class="stats">
+        <p><strong>Всього працівників:</strong> ${workers.length}</p>
+        <p><strong>Присутні сьогодні:</strong> ${workRecords.filter((r) => r.date === selectedDate && r.status === "присутній").length}</p>
+        <p><strong>Відсутні сьогодні:</strong> ${workRecords.filter((r) => r.date === selectedDate && r.status === "відсутній").length}</p>
+        <p><strong>Середня відвідуваність:</strong> ${workers.length > 0 ? Math.round(workers.reduce((acc, worker) => acc + getWorkerStats(worker.id).attendanceRate, 0) / workers.length) : 0}%</p>
+      </div>
+
+      <h2>Статистика по працівниках</h2>
+      <table>
+        <thead>
+          <tr>
+            <th>Працівник</th>
+            <th>Посада</th>
+            <th>Всього днів</th>
+            <th>Присутній</th>
+            <th>Відсутній</th>
+            <th>Запізнення</th>
+            <th>Відвідуваність</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${workers
+            .map((worker) => {
+              const stats = getWorkerStats(worker.id)
+              return `
+              <tr>
+                <td>${worker.name}</td>
+                <td>${worker.position}</td>
+                <td>${stats.totalDays}</td>
+                <td>${stats.presentDays}</td>
+                <td>${stats.absentDays}</td>
+                <td>${stats.lateDays}</td>
+                <td>${stats.attendanceRate}%</td>
+              </tr>
+            `
+            })
+            .join("")}
+        </tbody>
+      </table>
+
+      <h2>Записи за ${new Date(selectedDate).toLocaleDateString("uk-UA")}</h2>
+      <table>
+        <thead>
+          <tr>
+            <th>Працівник</th>
+            <th>Зміна</th>
+            <th>Статус</th>
+            <th>Час приходу</th>
+            <th>Час відходу</th>
+            <th>Відпрацьовано</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${workRecords
+            .filter((r) => r.date === selectedDate)
+            .map((record) => {
+              const worker = workers.find((w) => w.id === record.workerId)
+              const shift = getShiftByName(record.shift)
+              const worked = calculateWorkedHours(record, shift)
+              return `
+              <tr>
+                <td>${worker?.name || "Невідомий"}</td>
+                <td>${record.shift}</td>
+                <td>${record.status}</td>
+                <td>${record.arrivalTime || "-"}</td>
+                <td>${record.departureTime || "-"}</td>
+                <td>${worked.hours}:${worked.minutes.toString().padStart(2, "0")}</td>
+              </tr>
+            `
+            })
+            .join("")}
+        </tbody>
+      </table>
+    </body>
+    </html>
+  `
+
+      // Создаем Blob для Word документа
+      const blob = new Blob([htmlContent], {
+        type: "application/msword;charset=utf-8",
+      })
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement("a")
+      a.href = url
+      a.download = `atlant_report_${new Date().toISOString().split("T")[0]}.doc`
+      a.click()
+      URL.revokeObjectURL(url)
+
+      console.log("Word файл успішно створено")
+    } catch (error) {
+      console.error("Помилка експорту Word:", error)
+      alert("Помилка при створенні Word файлу")
+    } finally {
+      setIsExporting(false)
+    }
+  }
+
   if (!isLoaded) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 flex items-center justify-center">
@@ -522,6 +707,23 @@ export default function WorkScheduleTracker() {
                 <p className="text-sm sm:text-xl text-gray-600 font-medium">
                   Аутсорсингова компанія &quot;Атлант&quot;
                 </p>
+              </div>
+              <div className="flex items-center gap-2">
+                <Link href="/sync">
+                  <Button className="bg-gradient-to-r from-cyan-500 to-cyan-600 hover:from-cyan-600 hover:to-cyan-700 text-white border-0 shadow-lg hover:shadow-xl transition-all duration-300 transform hover:scale-105 rounded-xl font-semibold px-4 py-2">
+                    <RefreshCw className="h-4 w-4 sm:h-5 sm:w-5 mr-1 sm:mr-2" />
+                    <span className="hidden sm:inline">Синхронізація</span>
+                    <span className="sm:hidden">Sync</span>
+                  </Button>
+                </Link>
+                <Button
+                  onClick={logout}
+                  className="bg-gradient-to-r from-red-500 to-red-600 hover:from-red-600 hover:to-red-700 text-white border-0 shadow-lg hover:shadow-xl transition-all duration-300 transform hover:scale-105 rounded-xl font-semibold px-4 py-2"
+                >
+                  <LogOut className="h-4 w-4 sm:h-5 sm:w-5 mr-1 sm:mr-2" />
+                  <span className="hidden sm:inline">Вийти</span>
+                  <span className="sm:hidden">Вихід</span>
+                </Button>
               </div>
             </div>
           </CardContent>
@@ -570,13 +772,6 @@ export default function WorkScheduleTracker() {
                     >
                       ⏰ Розклад змін
                     </TabsTrigger>
-                    <TabsTrigger
-                      value="sync"
-                      className="w-full data-[state=active]:bg-indigo-500 data-[state=active]:text-white rounded-lg transition-all duration-300 font-medium p-3 justify-start"
-                      onClick={() => setIsMobileMenuOpen(false)}
-                    >
-                      🔄 Синхронізація
-                    </TabsTrigger>
                   </TabsList>
                 </div>
               )}
@@ -584,7 +779,7 @@ export default function WorkScheduleTracker() {
           </div>
 
           {/* Десктопные вкладки */}
-          <TabsList className="hidden sm:grid w-full grid-cols-5 bg-white shadow-lg rounded-xl p-2 h-16">
+          <TabsList className="hidden sm:grid w-full grid-cols-4 bg-white shadow-lg rounded-xl p-2 h-16">
             <TabsTrigger
               value="attendance"
               className="data-[state=active]:bg-blue-500 data-[state=active]:text-white rounded-lg transition-all duration-300 font-medium"
@@ -608,12 +803,6 @@ export default function WorkScheduleTracker() {
               className="data-[state=active]:bg-orange-500 data-[state=active]:text-white rounded-lg transition-all duration-300 font-medium"
             >
               ⏰ Розклад змін
-            </TabsTrigger>
-            <TabsTrigger
-              value="sync"
-              className="data-[state=active]:bg-indigo-500 data-[state=active]:text-white rounded-lg transition-all duration-300 font-medium"
-            >
-              🔄 Синхронізація
             </TabsTrigger>
           </TabsList>
 
@@ -938,7 +1127,7 @@ export default function WorkScheduleTracker() {
 
           <TabsContent value="statistics" className="space-y-4 sm:space-y-8">
             {/* Статистические карточки */}
-            <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-6">
+            <div className="grid gridd-cols-2 lg:grid-cols-4 gap-3 sm:gap-6">
               <Card className="bg-gradient-to-br from-blue-500 to-blue-600 text-white shadow-xl rounded-2xl">
                 <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2 p-3 sm:p-6">
                   <CardTitle className="text-xs sm:text-sm font-medium text-blue-100">Всього працівників</CardTitle>
@@ -1086,6 +1275,37 @@ export default function WorkScheduleTracker() {
                 </div>
               </CardContent>
             </Card>
+
+            {/* Кнопки экспорта */}
+            <Card className="bg-white/80 backdrop-blur-xl border-0 shadow-2xl rounded-3xl overflow-hidden">
+              <CardHeader className="bg-gradient-to-r from-purple-500 to-purple-600 text-white p-4 sm:p-8">
+                <CardTitle className="flex items-center gap-4 text-lg sm:text-2xl">
+                  <Download className="h-6 w-6 sm:h-8 sm:w-8" />
+                  Експорт звітів
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="p-4 sm:p-8">
+                <div className="flex gap-4 flex-wrap">
+                  <Button
+                    onClick={exportToPDF}
+                    disabled={isExporting}
+                    className="bg-gradient-to-r from-red-500 to-red-600 hover:from-red-600 hover:to-red-700 text-white border-0 shadow-lg hover:shadow-xl transition-all duration-300 transform hover:scale-105 rounded-xl text-base font-semibold px-6 py-3"
+                  >
+                    <FileSpreadsheet className="h-5 w-5 mr-2" />
+                    {isExporting ? "Експорт..." : "📄 PDF звіт"}
+                  </Button>
+
+                  <Button
+                    onClick={exportToWord}
+                    disabled={isExporting}
+                    className="bg-gradient-to-r from-blue-500 to-blue-600 hover:from-blue-600 hover:to-blue-700 text-white border-0 shadow-lg hover:shadow-xl transition-all duration-300 transform hover:scale-105 rounded-xl text-base font-semibold px-6 py-3"
+                  >
+                    <FileSpreadsheet className="h-5 w-5 mr-2" />
+                    {isExporting ? "Експорт..." : "📝 Word документ"}
+                  </Button>
+                </div>
+              </CardContent>
+            </Card>
           </TabsContent>
 
           <TabsContent value="schedule" className="space-y-4 sm:space-y-8">
@@ -1124,196 +1344,6 @@ export default function WorkScheduleTracker() {
               </CardContent>
             </Card>
           </TabsContent>
-          <TabsContent value="sync" className="space-y-4 sm:space-y-8">
-            <Card className="bg-white shadow-xl rounded-2xl border-0">
-              <CardHeader className="bg-gradient-to-r from-indigo-500 to-indigo-600 text-white rounded-t-2xl p-4 sm:p-8">
-                <CardTitle className="flex items-center gap-2 sm:gap-4 text-lg sm:text-xl">
-                  <div className="bg-white/20 p-2 rounded-lg">🔄</div>
-                  Синхронізація даних
-                </CardTitle>
-                <p className="text-indigo-100 text-sm sm:text-base mt-2">
-                  Синхронізуйте дані між різними пристроями та створюйте резервні копії
-                </p>
-              </CardHeader>
-              <CardContent className="p-4 sm:p-8">
-                {/* Статус синхронизации */}
-                {syncStatus !== "idle" && (
-                  <div
-                    className={`mb-6 p-4 rounded-lg border-2 ${
-                      syncStatus === "syncing"
-                        ? "bg-blue-50 border-blue-200"
-                        : syncStatus === "success"
-                          ? "bg-green-50 border-green-200"
-                          : "bg-red-50 border-red-200"
-                    }`}
-                  >
-                    <div className="flex items-center gap-3">
-                      {syncStatus === "syncing" && (
-                        <>
-                          <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-blue-500"></div>
-                          <span className="text-blue-700 font-medium">Синхронізація...</span>
-                        </>
-                      )}
-                      {syncStatus === "success" && (
-                        <>
-                          <CheckCircle className="h-5 w-5 text-green-500" />
-                          <span className="text-green-700 font-medium">Дані успішно синхронізовано!</span>
-                        </>
-                      )}
-                      {syncStatus === "error" && (
-                        <>
-                          <AlertTriangle className="h-5 w-5 text-red-500" />
-                          <span className="text-red-700 font-medium">
-                            Помилка синхронізації. Перевірте формат даних.
-                          </span>
-                        </>
-                      )}
-                    </div>
-                  </div>
-                )}
-
-                {/* Информация о последней синхронизации */}
-                {lastSyncTime && (
-                  <div className="mb-6 p-4 bg-gray-50 rounded-lg border border-gray-200">
-                    <p className="text-gray-700 text-sm">
-                      <span className="font-medium">Остання синхронізація:</span>{" "}
-                      {new Date(lastSyncTime).toLocaleString("uk-UA")}
-                    </p>
-                  </div>
-                )}
-
-                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                  {/* Экспорт данных */}
-                  <Card className="bg-gradient-to-br from-green-50 to-emerald-50 border-2 border-green-200">
-                    <CardHeader className="pb-3">
-                      <CardTitle className="flex items-center gap-3 text-green-700">
-                        <Download className="h-6 w-6" />
-                        Експорт даних
-                      </CardTitle>
-                    </CardHeader>
-                    <CardContent className="space-y-4">
-                      <p className="text-gray-600 text-sm">
-                        Створіть резервну копію або поділіться даними з іншими пристроями
-                      </p>
-
-                      <div className="space-y-3">
-                        <Button
-                          onClick={generateSyncCode}
-                          className="w-full bg-green-500 hover:bg-green-600 text-white"
-                        >
-                          📱 Створити код синхронізації
-                        </Button>
-
-                        <Button
-                          onClick={exportDataToFile}
-                          variant="outline"
-                          className="w-full border-green-300 text-green-700 hover:bg-green-50"
-                        >
-                          💾 Завантажити файл резервної копії
-                        </Button>
-                      </div>
-
-                      <div className="bg-green-100 border border-green-300 rounded-lg p-3">
-                        <p className="text-green-800 text-xs flex items-start gap-2">
-                          <span className="text-sm">💡</span>
-                          <span>
-                            Код синхронізації дозволяє швидко передати дані на інший пристрій. Файл резервної копії
-                            можна зберегти для довгострокового зберігання.
-                          </span>
-                        </p>
-                      </div>
-                    </CardContent>
-                  </Card>
-
-                  {/* Импорт данных */}
-                  <Card className="bg-gradient-to-br from-blue-50 to-indigo-50 border-2 border-blue-200">
-                    <CardHeader className="pb-3">
-                      <CardTitle className="flex items-center gap-3 text-blue-700">
-                        <Upload className="h-6 w-6" />
-                        Імпорт даних
-                      </CardTitle>
-                    </CardHeader>
-                    <CardContent className="space-y-4">
-                      <p className="text-gray-600 text-sm">
-                        Завантажте дані з іншого пристрою або відновіть з резервної копії
-                      </p>
-
-                      <div className="space-y-3">
-                        <Button
-                          onClick={() => setShowSyncModal(true)}
-                          className="w-full bg-blue-500 hover:bg-blue-600 text-white"
-                        >
-                          📱 Ввести код синхронізації
-                        </Button>
-
-                        <div>
-                          <input
-                            type="file"
-                            accept=".json"
-                            onChange={importDataFromFile}
-                            className="hidden"
-                            id="file-import"
-                          />
-                          <Button
-                            onClick={() => document.getElementById("file-import")?.click()}
-                            variant="outline"
-                            className="w-full border-blue-300 text-blue-700 hover:bg-blue-50"
-                          >
-                            📁 Завантажити файл резервної копії
-                          </Button>
-                        </div>
-                      </div>
-
-                      <div className="bg-blue-100 border border-blue-300 rounded-lg p-3">
-                        <p className="text-blue-800 text-xs flex items-start gap-2">
-                          <span className="text-sm">⚠️</span>
-                          <span>
-                            Імпорт даних замінить всі поточні дані. Рекомендується створити резервну копію перед
-                            імпортом.
-                          </span>
-                        </p>
-                      </div>
-                    </CardContent>
-                  </Card>
-                </div>
-
-                {/* Статистика данных */}
-                <Card className="mt-6 bg-gray-50 border border-gray-200">
-                  <CardHeader className="pb-3">
-                    <CardTitle className="flex items-center gap-3 text-gray-700">📊 Статистика даних</CardTitle>
-                  </CardHeader>
-                  <CardContent>
-                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 text-center">
-                      <div className="bg-white rounded-lg p-3 border border-gray-200">
-                        <div className="text-2xl font-bold text-blue-600">{workers.length}</div>
-                        <div className="text-xs text-gray-600">Працівників</div>
-                      </div>
-                      <div className="bg-white rounded-lg p-3 border border-gray-200">
-                        <div className="text-2xl font-bold text-green-600">{workRecords.length}</div>
-                        <div className="text-xs text-gray-600">Записів</div>
-                      </div>
-                      <div className="bg-white rounded-lg p-3 border border-gray-200">
-                        <div className="text-2xl font-bold text-purple-600">
-                          {new Set(workRecords.map((r) => r.date)).size}
-                        </div>
-                        <div className="text-xs text-gray-600">Унікальних днів</div>
-                      </div>
-                      <div className="bg-white rounded-lg p-3 border border-gray-200">
-                        <div className="text-2xl font-bold text-orange-600">
-                          {Math.round(
-                            ((localStorage.getItem("atlant-workers")?.length || 0) +
-                              (localStorage.getItem("atlant-work-records")?.length || 0)) /
-                              1024,
-                          )}
-                        </div>
-                        <div className="text-xs text-gray-600">КБ даних</div>
-                      </div>
-                    </div>
-                  </CardContent>
-                </Card>
-              </CardContent>
-            </Card>
-          </TabsContent>
         </Tabs>
 
         {/* Диалог подтверждения удаления */}
@@ -1335,7 +1365,7 @@ export default function WorkScheduleTracker() {
                   </p>
                   <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-3 sm:p-4">
                     <p className="text-yellow-800 text-xs sm:text-sm flex items-start gap-2">
-                      <span className="text-base sm:text-lg">⚠️</span>
+                      <span className="text-base sm:text-xl">⚠️</span>
                       <span>
                         Це також видалить всі записи відвідуваності цього працівника. Цю дію неможливо скасувати.
                       </span>
@@ -1467,88 +1497,6 @@ export default function WorkScheduleTracker() {
                       Зберегти
                     </Button>
                   </div>
-                </div>
-              </CardContent>
-            </Card>
-          </div>
-        )}
-
-        {/* Модальное окно синхронизации */}
-        {showSyncModal && (
-          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-            <Card className="bg-white shadow-2xl rounded-2xl border-0 max-w-lg w-full">
-              <CardHeader className="bg-gradient-to-r from-indigo-500 to-indigo-600 text-white rounded-t-2xl p-4 sm:p-6">
-                <CardTitle className="flex items-center gap-2 sm:gap-3 text-lg sm:text-xl">
-                  🔄 Синхронізація даних
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="p-4 sm:p-6">
-                <div className="space-y-4">
-                  {syncCode ? (
-                    // Показать сгенерированный код
-                    <div>
-                      <Label className="text-gray-700 font-semibold text-sm">
-                        Код синхронізації (скопіюйте та вставте на іншому пристрої):
-                      </Label>
-                      <div className="mt-2 p-3 bg-gray-100 border border-gray-300 rounded-lg">
-                        <code className="text-xs break-all font-mono text-gray-800">{syncCode}</code>
-                      </div>
-                      <div className="flex gap-2 mt-3">
-                        <Button
-                          onClick={() => {
-                            navigator.clipboard.writeText(syncCode)
-                            alert("Код скопійовано в буфер обміну!")
-                          }}
-                          className="flex-1 bg-green-500 hover:bg-green-600 text-white text-sm"
-                        >
-                          📋 Копіювати код
-                        </Button>
-                        <Button
-                          onClick={() => {
-                            setSyncCode("")
-                            setShowSyncModal(false)
-                          }}
-                          variant="outline"
-                          className="flex-1 text-sm"
-                        >
-                          Закрити
-                        </Button>
-                      </div>
-                    </div>
-                  ) : (
-                    // Ввод кода для импорта
-                    <div>
-                      <Label htmlFor="importCode" className="text-gray-700 font-semibold text-sm">
-                        Введіть код синхронізації:
-                      </Label>
-                      <textarea
-                        id="importCode"
-                        value={importData}
-                        onChange={(e) => setImportData(e.target.value)}
-                        placeholder="Вставте код синхронізації тут..."
-                        className="mt-2 w-full h-32 p-3 border-2 border-gray-200 focus:border-indigo-500 rounded-lg text-xs font-mono resize-none"
-                      />
-                      <div className="flex gap-2 mt-3">
-                        <Button
-                          onClick={importDataFromCode}
-                          disabled={!importData.trim() || syncStatus === "syncing"}
-                          className="flex-1 bg-indigo-500 hover:bg-indigo-600 text-white text-sm"
-                        >
-                          {syncStatus === "syncing" ? "Імпорт..." : "📥 Імпортувати дані"}
-                        </Button>
-                        <Button
-                          onClick={() => {
-                            setImportData("")
-                            setShowSyncModal(false)
-                          }}
-                          variant="outline"
-                          className="flex-1 text-sm"
-                        >
-                          Скасувати
-                        </Button>
-                      </div>
-                    </div>
-                  )}
                 </div>
               </CardContent>
             </Card>

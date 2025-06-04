@@ -97,6 +97,33 @@ coverage/
 .yarn/install-state.gz
 .pnp.*
 
-# Lock files
+# Lock files (опционально - можете оставить один из них)
 package-lock.json
 yarn.lock
+
+# Дополнительно для безопасности
+# Файлы с паролями и ключами
+*.key
+*.pem
+*.p12
+*.pfx
+secrets.json
+config/secrets.js
+
+# Логи
+logs/
+*.log
+
+# Backup files
+*.backup
+*.bak
+*.tmp
+
+# Database files (если будете использовать локальную БД)
+*.db
+*.sqlite
+*.sqlite3
+
+# Deployment files
+.deployment
+deploy.sh
